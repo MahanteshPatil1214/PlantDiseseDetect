@@ -108,7 +108,7 @@ st.markdown(
     /* Global CSS styles are at the bottom for better organization */
     .header {
         background-color: #38761D; /* Deep Green for Header */
-        color: white;
+        color: black;
         padding: 15px 25px; /* Increased padding */
         font-size: 26px;
         font-weight: 800;
