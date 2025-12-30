@@ -4,80 +4,84 @@ import json
 import tensorflow as tf
 from PIL import Image
 import io
+from fpdf import FPDF
 
-# --- 1. CONFIGURATION AND STYLING ---
-
+# --- 1. CONFIGURATION ---
 st.set_page_config(
-    page_title="Agri-Sense: Plant Disease Diagnostic",
+    page_title="Agri-Sense AI",
     page_icon="🌱",
-    layout="wide", 
-    initial_sidebar_state="collapsed"
+    layout="wide"
 )
 
+# --- 2. THEME & STYLING ---
 def apply_custom_css():
     st.markdown("""
         <style>
-        /* Modern UI Overrides */
         .stApp { background-color: #FAFAF5; }
-        
-        /* Sticky Header */
         .header-container {
             background-color: #38761D;
             color: white;
-            padding: 1rem 2rem;
+            padding: 1.5rem;
             border-radius: 0 0 15px 15px;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
-
-        /* Result Cards */
         .status-card {
             background: white;
-            padding: 1.5rem;
+            padding: 20px;
             border-radius: 12px;
             border-left: 8px solid #38761D;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
         }
-        
-        .confidence-text {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #28a745;
-        }
-
-        /* Responsive Buttons */
+        .metric-label { color: #666; font-size: 14px; margin-bottom: 0; }
+        .metric-val { font-size: 26px; font-weight: bold; color: #C55A11; margin-top: 0; }
         div.stButton > button {
             width: 100%;
-            border-radius: 8px;
-            height: 3em;
             background-color: #38761D;
             color: white;
             font-weight: bold;
-            border: none;
-            transition: 0.3s;
-        }
-        div.stButton > button:hover {
-            background-color: #2d5e17;
-            border: none;
-            color: white;
+            border-radius: 8px;
+            height: 3.5em;
         }
         </style>
     """, unsafe_allow_html=True)
 
 apply_custom_css()
 
-# --- 2. RESOURCE LOADING ---
+# --- 3. HELPER FUNCTIONS ---
+
+def create_pdf(name, confidence, cause, cure):
+    """Generates a downloadable PDF report."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 20)
+    pdf.set_text_color(56, 118, 29)
+    pdf.cell(0, 20, "Agri-Sense Diagnostic Report", ln=True, align='C')
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, f"Diagnosis: {name}", ln=True)
+    pdf.set_font("Arial", 'I', 12)
+    pdf.cell(0, 10, f"Confidence Score: {confidence:.2f}%", ln=True)
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "Pathology & Cause:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.multi_cell(0, 8, cause)
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, "Recommended Treatment:", ln=True)
+    pdf.set_font("Arial", '', 12)
+    pdf.multi_cell(0, 8, cure)
+    return pdf.output(dest='S').encode('latin-1')
 
 @st.cache_resource
 def load_model():
     try:
-        # Load model and handle the custom oneDNN messages internally
-        model_path = "models/plant_disease_recog_model_pwp.keras" 
-        return tf.keras.models.load_model(model_path)
+        return tf.keras.models.load_model("models/plant_disease_recog_model_pwp.keras")
     except Exception as e:
-        st.error(f"Model Load Error: {e}")
+        st.error(f"Error loading model: {e}")
         return None
 
 @st.cache_data
@@ -86,85 +90,109 @@ def load_disease_info():
         with open("plant_disease.json", 'r') as f:
             return json.load(f)
     except:
-        # Fallback dataset for demonstration
-        return {
-            "0": {"name": "Tomato - Bacterial Spot", "cause": "Bacteria", "cure": "Copper spray"},
-            "1": {"name": "Corn - Rust", "cause": "Fungus", "cure": "Fungicide"}
-        }
+        return [{"name": "Healthy Plant", "cause": "Normal growth.", "cure": "None needed."}]
 
 model = load_model()
 disease_data = load_disease_info()
 
-# --- 3. LOGIC & PREPROCESSING ---
-
-def preprocess_image(image_input):
-    """Refined preprocessing for TensorFlow models."""
-    img = Image.open(image_input).convert("RGB")
-    img = img.resize((160, 160)) # Match your model's expected input
-    img_array = tf.keras.utils.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    # Important: If your model was trained on [0,1], rescale here:
-    # img_array = img_array / 255.0 
-    return img_array
-
-# --- 4. UI LAYOUT ---
-
-st.markdown('<div class="header-container"><h1>🌱 Agri-Sense AI Diagnostic</h1></div>', unsafe_allow_html=True)
-
-col1, col2 = st.columns([1, 1], gap="large")
-
-with col1:
-    st.subheader("📸 Leaf Analysis")
-    uploaded_file = st.file_uploader("Upload leaf image...", type=["jpg", "png", "jpeg"])
+# --- 4. SIDEBAR NAVIGATION ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
+    st.title("Agri-Sense AI")
+    st.markdown("---")
     
-    if uploaded_file:
-        st.image(uploaded_file, use_container_width=True, caption="Target Image")
-        # Store in session state for persistency across re-runs
-        st.session_state['active_image'] = uploaded_file
-
-with col2:
-    st.subheader("🏥 Diagnostic Results")
+    st.subheader("🧪 Example Gallery")
+    st.info("No photo? Select a sample below:")
     
-    if uploaded_file:
-        if st.button("🚀 Run Instant Diagnosis"):
-            if model is None:
-                st.error("Model not available.")
-            else:
-                with st.spinner("Our AI is scanning for pathogens..."):
-                    # Process and Predict
-                    processed_img = preprocess_image(uploaded_file)
-                    prediction = model.predict(processed_img)
-                    
-                    # Logic to handle both JSON lists and JSON dictionaries
-                    idx = np.argmax(prediction)
-                    conf = np.max(prediction) * 100
-                    
-                    # Result extraction
-                    if isinstance(disease_data, list):
-                        res = disease_data[idx] if idx < len(disease_data) else None
-                    else:
-                        res = disease_data.get(str(idx))
+    example_options = {
+        "Custom Upload": None,
+        "Healthy Potato": "examples/plant.jpg",   # Matches your folder
+        "Tomato Rust": "examples/plant1.jpeg",
+    }
+    selection = st.selectbox("Select Sample", list(example_options.keys()))
+    
+    if st.button("♻️ Reset All"):
+        st.rerun()
 
-                    if res:
-                        st.markdown(f"""
-                            <div class="status-card">
-                                <p style="margin:0; color:#666;">DIAGNOSIS</p>
-                                <h2 style="color:#C55A11; margin-top:0;">{res['name']}</h2>
-                                <p style="margin:0; color:#666;">CONFIDENCE</p>
-                                <span class="confidence-text">{conf:.1f}%</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        tab1, tab2 = st.tabs(["🦠 Pathology", "💊 Treatment Plan"])
-                        with tab1:
-                            st.write(res.get('cause', 'N/A'))
-                        with tab2:
-                            st.success(res.get('cure', 'Consult an expert.'))
-                    else:
-                        st.error("Diagnosis index not found in metadata.")
+# --- 5. MAIN INTERFACE ---
+st.markdown('<div class="header-container"><h1>🌱 Agri-Sense Plant Diagnostic</h1></div>', unsafe_allow_html=True)
+
+col_img, col_res = st.columns([1.2, 1], gap="large")
+
+# IMAGE PROCESSING LOGIC
+final_image = None
+
+with col_img:
+    st.subheader("1. Leaf Input")
+    
+    # If "Custom Upload" is selected or no selection is made
+    if selection == "Custom Upload":
+        uploaded_file = st.file_uploader("Upload leaf photo (JPG/PNG)", type=["jpg", "jpeg", "png"])
+        if uploaded_file:
+            final_image = Image.open(uploaded_file)
     else:
-        st.info("Waiting for image upload to begin diagnosis.")
+        # Load from Example Path
+        try:
+            final_image = Image.open(example_options[selection])
+        except Exception as e:
+            st.warning(f"Could not load example: {selection}. Ensure file exists in /examples/ folder.")
 
-# --- FOOTER ---
+    if final_image:
+        st.image(final_image, caption="Selected Image for Analysis", use_container_width=True)
+
+with col_res:
+    st.subheader("2. AI Diagnosis")
+    
+    if final_image:
+        if st.button("🔎 Start Diagnosis"):
+            if model:
+                with st.spinner("Analyzing cell structures..."):
+                    # Preprocessing (Ensuring RGB and resizing)
+                    img_resized = final_image.convert("RGB").resize((160, 160))
+                    img_array = tf.keras.utils.img_to_array(img_resized)
+                    img_array = np.expand_dims(img_array, axis=0)
+                    
+                    # Optional: Scaler (uncomment if model requires 0-1 range)
+                    # img_array = img_array / 255.0
+                    
+                    # Prediction
+                    predictions = model.predict(img_array)
+                    idx = np.argmax(predictions)
+                    conf = np.max(predictions) * 100
+                    
+                    # Extract info from JSON list
+                    if idx < len(disease_data):
+                        res = disease_data[idx]
+                    else:
+                        res = {"name": "Unknown", "cause": "Out of range", "cure": "N/A"}
+                    
+                    # DISPLAY CARDS
+                    st.markdown(f"""
+                        <div class="status-card">
+                            <p class="metric-label">DIAGNOSIS</p>
+                            <p class="metric-val">{res['name']}</p>
+                            <hr style="margin: 10px 0;">
+                            <p class="metric-label">AI CONFIDENCE</p>
+                            <p class="metric-val" style="color:#28a745;">{conf:.2f}%</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander("📝 View Details", expanded=True):
+                        st.markdown(f"**Cause:** {res.get('cause')}")
+                        st.markdown(f"**Treatment:** {res.get('cure')}")
+                    
+                    # PDF EXPORT
+                    report_data = create_pdf(res['name'], conf, res['cause'], res['cure'])
+                    st.download_button(
+                        label="📄 Download Treatment Report",
+                        data=report_data,
+                        file_name=f"Diagnosis_{res['name'].replace(' ', '_')}.pdf",
+                        mime="application/pdf"
+                    )
+            else:
+                st.error("AI Model not loaded. Check /models/ folder.")
+    else:
+        st.info("Waiting for image input. Use the sidebar for examples or upload your own.")
+
 st.markdown("---")
-st.caption("© 2025 Agri-Sense AI. For educational use only. Always verify with local agricultural extension services.")
+st.caption("© 2025 Agri-Sense Farm Intelligence | AI for Sustainable Agriculture")
