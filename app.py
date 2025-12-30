@@ -3,7 +3,6 @@ import numpy as np
 import json
 import tensorflow as tf
 from PIL import Image
-import io
 from fpdf import FPDF
 
 # --- 1. CONFIGURATION ---
@@ -53,22 +52,26 @@ apply_custom_css()
 # --- 3. HELPER FUNCTIONS ---
 
 def create_pdf(name, confidence, cause, cure):
-    """Generates a downloadable PDF report."""
+    """Generates a professional PDF diagnostic report."""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 20)
     pdf.set_text_color(56, 118, 29)
     pdf.cell(0, 20, "Agri-Sense Diagnostic Report", ln=True, align='C')
+    
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, f"Diagnosis: {name}", ln=True)
+    
     pdf.set_font("Arial", 'I', 12)
     pdf.cell(0, 10, f"Confidence Score: {confidence:.2f}%", ln=True)
     pdf.ln(10)
+    
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Pathology & Cause:", ln=True)
     pdf.set_font("Arial", '', 12)
     pdf.multi_cell(0, 8, cause)
+    
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 14)
     pdf.cell(0, 10, "Recommended Treatment:", ln=True)
@@ -80,8 +83,7 @@ def create_pdf(name, confidence, cause, cure):
 def load_model():
     try:
         return tf.keras.models.load_model("models/plant_disease_recog_model_pwp.keras")
-    except Exception as e:
-        st.error(f"Error loading model: {e}")
+    except:
         return None
 
 @st.cache_data
@@ -90,28 +92,26 @@ def load_disease_info():
         with open("plant_disease.json", 'r') as f:
             return json.load(f)
     except:
-        return [{"name": "Healthy Plant", "cause": "Normal growth.", "cure": "None needed."}]
+        return [{"name": "Healthy", "cause": "Normal growth.", "cure": "None required."}]
 
 model = load_model()
 disease_data = load_disease_info()
 
-# --- 4. SIDEBAR NAVIGATION ---
+# --- 4. SIDEBAR ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/628/628283.png", width=80)
     st.title("Agri-Sense AI")
     st.markdown("---")
     
     st.subheader("🧪 Example Gallery")
-    st.info("No photo? Select a sample below:")
-    
     example_options = {
         "Custom Upload": None,
-        "Healthy Potato": "examples/plant.jpg",   # Matches your folder
-        "Tomato Rust": "examples/plant1.jpeg",
+        "Healthy Potato": "examples/plant.jpg",
+        "Tomato Rust": "examples/plant1.jpeg" 
     }
     selection = st.selectbox("Select Sample", list(example_options.keys()))
     
-    if st.button("♻️ Reset All"):
+    if st.button("♻️ Reset App"):
         st.rerun()
 
 # --- 5. MAIN INTERFACE ---
@@ -119,54 +119,46 @@ st.markdown('<div class="header-container"><h1>🌱 Agri-Sense Plant Diagnostic<
 
 col_img, col_res = st.columns([1.2, 1], gap="large")
 
-# IMAGE PROCESSING LOGIC
 final_image = None
 
 with col_img:
-    st.subheader("1. Leaf Input")
-    
-    # If "Custom Upload" is selected or no selection is made
+    st.subheader("1. Input Image")
     if selection == "Custom Upload":
-        uploaded_file = st.file_uploader("Upload leaf photo (JPG/PNG)", type=["jpg", "jpeg", "png"])
+        uploaded_file = st.file_uploader("Upload leaf photo", type=["jpg", "jpeg", "png"])
         if uploaded_file:
             final_image = Image.open(uploaded_file)
     else:
-        # Load from Example Path
         try:
             final_image = Image.open(example_options[selection])
-        except Exception as e:
-            st.warning(f"Could not load example: {selection}. Ensure file exists in /examples/ folder.")
+        except:
+            st.warning("Example image not found in folder.")
 
     if final_image:
-        st.image(final_image, caption="Selected Image for Analysis", use_container_width=True)
+        st.image(final_image, caption="Leaf Selected for Analysis", use_container_width=True)
 
 with col_res:
-    st.subheader("2. AI Diagnosis")
+    st.subheader("2. Diagnosis Result")
     
     if final_image:
-        if st.button("🔎 Start Diagnosis"):
+        if st.button("🔎 Run Diagnostic"):
             if model:
-                with st.spinner("Analyzing cell structures..."):
-                    # Preprocessing (Ensuring RGB and resizing)
+                with st.spinner("Analyzing biological patterns..."):
+                    # Preprocessing
                     img_resized = final_image.convert("RGB").resize((160, 160))
                     img_array = tf.keras.utils.img_to_array(img_resized)
                     img_array = np.expand_dims(img_array, axis=0)
-                    
-                    # Optional: Scaler (uncomment if model requires 0-1 range)
-                    # img_array = img_array / 255.0
+                    img_array = img_array / 255.0  # Normalize pixels
                     
                     # Prediction
-                    predictions = model.predict(img_array)
-                    idx = np.argmax(predictions)
-                    conf = np.max(predictions) * 100
+                    raw_preds = model.predict(img_array)
+                    probabilities = raw_preds[0] 
+                    idx = np.argmax(probabilities)
+                    conf = probabilities[idx] * 100
                     
-                    # Extract info from JSON list
-                    if idx < len(disease_data):
-                        res = disease_data[idx]
-                    else:
-                        res = {"name": "Unknown", "cause": "Out of range", "cure": "N/A"}
+                    # Look up disease data
+                    res = disease_data[idx] if idx < len(disease_data) else disease_data[0]
                     
-                    # DISPLAY CARDS
+                    # DISPLAY RESULT CARD
                     st.markdown(f"""
                         <div class="status-card">
                             <p class="metric-label">DIAGNOSIS</p>
@@ -176,23 +168,24 @@ with col_res:
                             <p class="metric-val" style="color:#28a745;">{conf:.2f}%</p>
                         </div>
                     """, unsafe_allow_html=True)
+
+                    with st.expander("📝 View pathology and Treatment", expanded=True):
+                        st.markdown(f"**Pathology:** {res.get('cause')}")
+                        st.markdown("---")
+                        st.success(f"**Treatment Plan:** {res.get('cure')}")
                     
-                    with st.expander("📝 View Details", expanded=True):
-                        st.markdown(f"**Cause:** {res.get('cause')}")
-                        st.markdown(f"**Treatment:** {res.get('cure')}")
-                    
-                    # PDF EXPORT
-                    report_data = create_pdf(res['name'], conf, res['cause'], res['cure'])
-                    st.download_button(
-                        label="📄 Download Treatment Report",
-                        data=report_data,
-                        file_name=f"Diagnosis_{res['name'].replace(' ', '_')}.pdf",
-                        mime="application/pdf"
-                    )
+                    # ACTION BUTTONS
+                    btn1, btn2 = st.columns(2)
+                    with btn1:
+                        pdf_data = create_pdf(res['name'], conf, res['cause'], res['cure'])
+                        st.download_button("📄 Download PDF", pdf_data, f"Diagnosis_{res['name']}.pdf", "application/pdf")
+                    with btn2:
+                        query = f"pesticide and agricultural supply shops for {res['name']} near me"
+                        st.link_button("📍 Find Supplies", f"https://www.google.com/maps/search/{query.replace(' ', '+')}")
             else:
-                st.error("AI Model not loaded. Check /models/ folder.")
+                st.error("Model files missing. Check /models/ folder.")
     else:
-        st.info("Waiting for image input. Use the sidebar for examples or upload your own.")
+        st.info("Upload or select an image to start the diagnosis.")
 
 st.markdown("---")
-st.caption("© 2025 Agri-Sense Farm Intelligence | AI for Sustainable Agriculture")
+st.caption("© 2025 Agri-Sense AI Project Submission")
