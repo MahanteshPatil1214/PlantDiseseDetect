@@ -1,0 +1,1 @@
+- it is live on https://plantdiseasdetect.streamlit.app/
