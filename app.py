@@ -147,13 +147,17 @@ with col_res:
                     img_resized = final_image.convert("RGB").resize((160, 160))
                     img_array = tf.keras.utils.img_to_array(img_resized)
                     img_array = np.expand_dims(img_array, axis=0)
-                    img_array = img_array / 255.0  # Normalize pixels
+                    # img_array = img_array / 255.0  # EfficientNet expects [0, 255]
                     
                     # Prediction
-                    raw_preds = model.predict(img_array)
+                    raw_preds = model.predict(img_array, verbose=0)
                     probabilities = raw_preds[0] 
                     idx = np.argmax(probabilities)
                     conf = probabilities[idx] * 100
+                    
+                    # Validation: Check confidence threshold
+                    if conf < 50:
+                        st.warning(f"⚠️ Confidence low ({conf:.2f}%). Model uncertain about diagnosis.")
                     
                     # Look up disease data
                     res = disease_data[idx] if idx < len(disease_data) else disease_data[0]

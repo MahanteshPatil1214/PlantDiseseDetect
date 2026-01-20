@@ -1,0 +1,14 @@
+Inspecting model: models/plant_disease_recog_model_pwp.keras
+
+--- Model Input Shape ---
+(None, 160, 160, 3)
+
+--- First Layer Config ---
+{'batch_shape': (None, 160, 160, 3), 'dtype': 'float32', 'sparse': False, 'ragged': False, 'name': 'input_layer_1'}
+
+--- Model Summary Head ---
+0: input_layer_1 (InputLayer)
+1: efficientnetb4 (Functional)
+2: global_average_pooling2d (GlobalAveragePooling2D)
+3: dropout (Dropout)
+4: dense (Dense)

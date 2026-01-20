@@ -1,0 +1,11 @@
+--- Testing 160x160 ---
+Prediction: Tomato___Late_blight
+Confidence: 100.00%
+Top 3 indices: [31 18 25]
+Top 3 probs: [0.9999993 0.9994986 0.9991399]
+
+--- Testing 224x224 ---
+Prediction: Tomato___Late_blight
+Confidence: 99.99%
+Top 3 indices: [31 11 25]
+Top 3 probs: [0.99992836 0.99982435 0.9997272 ]
